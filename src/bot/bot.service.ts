@@ -26,12 +26,31 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
         );
 
         this.bot.on('text', async (ctx) => {
-            const url = ctx.message.text.match(IG_REGEX)?.[0];
-            if (!url) {
+            const match = ctx.message.text.match(IG_REGEX);
+            if (!match) {
                 await ctx.reply('Bu Instagram linkiga o\'xshamaydi.');
                 return;
             }
 
+            const url = match[0];
+            const shortcode = match[1];   // regex'dagi ([\w-]+) qismi
+
+            // 1. Avval cache
+            const cached = await this.downloader.getCached(shortcode);
+            if (cached?.length) {
+                if (cached.length === 1) {
+                    await ctx.replyWithVideo(cached[0]);
+                } else {
+                    for (let i = 0; i < cached.length; i += 10) {
+                        await ctx.replyWithMediaGroup(
+                            cached.slice(i, i + 10).map((id) => ({ type: 'video' as const, media: id })),
+                        );
+                    }
+                }
+                return;
+            }
+
+            // 2. Cache'da yo'q — yuklaymiz
             const status = await ctx.reply('Yuklanmoqda...');
             const { dir, files } = await this.downloader.download(url);
 
@@ -39,16 +58,20 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
                 if (files.length === 0) {
                     await ctx.reply('Bu postda video topilmadi.');
                 } else if (files.length === 1) {
-                    await ctx.replyWithVideo({ source: files[0] });
+                    const sent = await ctx.replyWithVideo({ source: files[0] });
+                    await this.downloader.setCached(shortcode, [sent.video.file_id]);
                 } else {
+                    const fileIds: string[] = [];
                     for (let i = 0; i < files.length; i += 10) {
-                        await ctx.replyWithMediaGroup(
+                        const sent = await ctx.replyWithMediaGroup(
                             files.slice(i, i + 10).map((f) => ({
                                 type: 'video' as const,
                                 media: { source: f },
                             })),
                         );
+                        fileIds.push(...sent.map((m: any) => m.video.file_id));
                     }
+                    await this.downloader.setCached(shortcode, fileIds);
                 }
             } catch (e) {
                 this.logger.error(e);
