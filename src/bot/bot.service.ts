@@ -20,7 +20,9 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
         this.bot = new Telegraf(token);
     }
 
+
     async onModuleInit() {
+
         this.bot.start((ctx) =>
             ctx.reply(' Assalomu Aleykum Hurmatli Mizoj😊\nInstagram post yoki reel linkini yuboring.✅\n '),
         );
@@ -50,6 +52,17 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
                 return;
             }
 
+
+            const userId = ctx.from.id;
+            const key = `rl:${userId}`;
+            const count = await this.downloader.hitRateLimit(key);
+
+            if (count > 5) {
+                await ctx.reply('Biroz sekinroq — bir daqiqada 5 tagacha video yuklash mumkin.');
+                return;
+            }
+
+
             // 2. Cache'da yo'q — yuklaymiz
             const status = await ctx.reply('Yuklanmoqda...');
             const { dir, files } = await this.downloader.download(url);
@@ -76,6 +89,13 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
             } catch (e) {
                 this.logger.error(e);
                 await ctx.reply('Xatolik yuz berdi.');
+                const adminId = 1267528378
+                if (adminId) {
+                    await this.bot.telegram
+                        .sendMessage(adminId, `Xato:\n${url}\n${e instanceof Error ? e.message : String(e)}`)
+                        .catch(() => { });
+                }
+
             } finally {
                 await this.downloader.cleanup(dir);
                 await ctx.deleteMessage(status.message_id).catch(() => { });

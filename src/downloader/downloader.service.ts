@@ -16,6 +16,13 @@ export class DownloaderService {
         port: Number(process.env.REDIS_PORT) || 6379,
     });
 
+    async hitRateLimit(key: string): Promise<number> {
+        const count = await this.redis.incr(key);
+        if (count === 1) {
+            await this.redis.expire(key, 60);
+        }
+        return count;
+    }
     async download(url: string): Promise<{ dir: string; files: string[] }> {
         const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ig-'));
 
