@@ -52,14 +52,16 @@ export class DownloadProcessor extends WorkerHost {
       this.logger.error(e);
       await tg.sendMessage(chatId, 'Xatolik yuz berdi.', {
         reply_parameters: { message_id: replyToMessageId },
-      }).catch(() => {});
+      }).catch(() => { });
       await tg
         .sendMessage(ADMIN_ID, `Xato:\n${url}\n${e instanceof Error ? e.message : String(e)}`)
-        .catch(() => {});
+        .catch(() => { });
       throw e;
     } finally {
       await this.downloader.cleanup(dir);
-      await tg.deleteMessage(chatId, statusMessageId).catch(() => {});
+      if (statusMessageId) {
+        await tg.deleteMessage(chatId, statusMessageId).catch(() => { });
+      }
     }
   }
 }

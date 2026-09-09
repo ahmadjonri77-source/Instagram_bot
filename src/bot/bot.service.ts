@@ -32,67 +32,72 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       ctx.reply(' Assalomu Aleykum Hurmatli Mizoj😊\nInstagram post yoki reel linkini yuboring.✅\n '),
     );
 
-  this.bot.on('text', async (ctx) => {
-  const match = ctx.message.text.match(IG_REGEX);
-  if (!match) {
-    // Guruhda javob yozmaymiz, faqat shaxsiy chatda
-    if (ctx.chat.type === 'private') {
-      await ctx.reply('Bu Instagram linkiga o\'xshamaydi.');
-    }
-    return; // guruhda link topilmasa — jim turamiz
-  }
-
-  const url = match[0];
-  const shortcode = match[1];
-
-  // 1. Cache
-  const cached = await this.downloader.getCached(shortcode);
-  if (cached?.length) {
-    if (cached.length === 1) {
-      await ctx.replyWithVideo(cached[0], {
-        reply_parameters: { message_id: ctx.message.message_id },
-      });
-    } else {
-      for (let i = 0; i < cached.length; i += 10) {
-        await ctx.replyWithMediaGroup(
-          cached.slice(i, i + 10).map((id) => ({ type: 'video' as const, media: id })),
-        );
+    this.bot.on('text', async (ctx) => {
+      const match = ctx.message.text.match(IG_REGEX);
+      if (!match) {
+        // Guruhda javob yozmaymiz, faqat shaxsiy chatda
+        if (ctx.chat.type === 'private') {
+          await ctx.reply('Bu Instagram linkiga o\'xshamaydi.');
+        }
+        return; // guruhda link topilmasa — jim turamiz
       }
-    }
-    return;
-  }
 
-  // 2. Rate limit
-  const userId = ctx.from?.id;
-  if (!userId) return;
-  const count = await this.downloader.hitRateLimit(`rl:${userId}`);
-  if (count > 5) {
-    await ctx.reply('Biroz sekinroq — bir daqiqada 5 tagacha video yuklash mumkin.', {
-      reply_parameters: { message_id: ctx.message.message_id },
+      const url = match[0];
+      const shortcode = match[1];
+
+      // 1. Cache
+      const cached = await this.downloader.getCached(shortcode);
+      if (cached?.length) {
+        if (cached.length === 1) {
+          await ctx.replyWithVideo(cached[0], {
+            reply_parameters: { message_id: ctx.message.message_id },
+          });
+        } else {
+          for (let i = 0; i < cached.length; i += 10) {
+            await ctx.replyWithMediaGroup(
+              cached.slice(i, i + 10).map((id) => ({ type: 'video' as const, media: id })),
+            );
+          }
+        }
+        return;
+      }
+
+      // 2. Rate limit
+      const userId = ctx.from?.id;
+      if (!userId) return;
+      const count = await this.downloader.hitRateLimit(`rl:${userId}`);
+      if (count > 5) {
+        await ctx.reply('Biroz sekinroq — bir daqiqada 5 tagacha video yuklash mumkin.', {
+          reply_parameters: { message_id: ctx.message.message_id },
+        });
+        return;
+      }
+
+      // 3. Navbatga
+      const isPrivate = ctx.chat.type === 'private';
+
+      const status = isPrivate
+        ? await ctx.reply('Navbatga qo\'shildi...', {
+          reply_parameters: { message_id: ctx.message.message_id },
+        })
+        : null;
+
+      await this.queue.add(
+        'download',
+        {
+          url,
+          shortcode,
+          chatId: ctx.chat.id,
+          statusMessageId: status?.message_id ?? null,
+          replyToMessageId: ctx.message.message_id,
+        },
+        {
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+        },
+      );
     });
-    return;
-  }
-
-  // 3. Navbatga
-  const status = await ctx.reply('Navbatga qo\'shildi...', {
-    reply_parameters: { message_id: ctx.message.message_id },
-  });
-  await this.queue.add(
-    'download',
-    {
-      url,
-      shortcode,
-      chatId: ctx.chat.id,
-      statusMessageId: status.message_id,
-      replyToMessageId: ctx.message.message_id, // gruhda kimga javob berishni bilish uchun
-    },
-    {
-      attempts: 2,
-      backoff: { type: 'exponential', delay: 5000 },
-      removeOnComplete: true,
-    },
-  );
-});
 
     this.bot.launch();
     this.logger.log('Bot ishga tushdi');
