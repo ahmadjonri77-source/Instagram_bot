@@ -77,7 +77,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       const isPrivate = ctx.chat.type === 'private';
 
       const status = isPrivate
-        ? await ctx.reply('Navbatga qo\'shildi...', {
+        ? await ctx.reply('⏳ Yuklanmoqda...', {
           reply_parameters: { message_id: ctx.message.message_id },
         })
         : null;
