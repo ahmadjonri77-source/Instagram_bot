@@ -13,7 +13,7 @@ const videoMeta = (f: VideoFile) => ({
   supports_streaming: true,
 });
 
-@Processor('downloads', { concurrency: 2 })
+@Processor('downloads', { concurrency: 3 })
 export class DownloadProcessor extends WorkerHost {
   private readonly logger = new Logger(DownloadProcessor.name);
   private readonly adminId: number | null;
@@ -35,6 +35,11 @@ export class DownloadProcessor extends WorkerHost {
     const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
     let dir: string | null = null;
     let done = false;
+
+    // "video yuborilmoqda..." belgisi — Telegram uni 5 soniyada o'chiradi, shuning uchun takrorlanadi
+    const sendAction = () => tg.sendChatAction(chatId, 'upload_video').catch(() => { });
+    sendAction();
+    const actionTimer = setInterval(sendAction, 4000);
 
     try {
       const result = await this.downloader.download(url);
@@ -87,6 +92,7 @@ export class DownloadProcessor extends WorkerHost {
       }
       throw e;
     } finally {
+      clearInterval(actionTimer);
       if (dir) await this.downloader.cleanup(dir);
       if (statusMessageId && (done || isLastAttempt)) {
         await tg.deleteMessage(chatId, statusMessageId).catch(() => { });
