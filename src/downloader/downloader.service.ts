@@ -28,6 +28,7 @@ const PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 // yt-dlp shunday desa, bu xato emas — postda haqiqatan video yo'q
 const NO_VIDEO = /no video|no media|unsupported url/i;
+const TOO_BIG = /larger than max-filesize/i;
 
 @Injectable()
 export class DownloaderService implements OnModuleDestroy {
@@ -56,14 +57,14 @@ export class DownloaderService implements OnModuleDestroy {
         return Number(res?.[1]?.[1] ?? 0);
     }
 
-    async download(url: string): Promise<{ dir: string; files: MediaFile[] }> {
+    async download(url: string): Promise<{ dir: string; files: MediaFile[]; tooBig?: boolean }> {
         const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dl-'));
-
-        const ytError = await this.run('yt-dlp', [
-            '-f', 'best[ext=mp4]',
+        const ytdlp = (format: string) => this.run('yt-dlp', [
+            '-f', format,
             '--ignore-errors',
             '--no-warnings',
             '--no-mtime',
+            // Telegram botlar 50 MB dan katta fayl yubora olmaydi
             '--max-filesize', '50M',
             '--socket-timeout', '30',
             ...this.cookieArgs,
@@ -71,7 +72,14 @@ export class DownloaderService implements OnModuleDestroy {
             url,
         ], 180_000);
 
+        const yt = await ytdlp('best[ext=mp4]');
         let files = await this.collect(dir);
+
+        // yt-dlp katta faylni jimgina tashlab ketadi (exit 0). Past sifatga o'tish yordam bermaydi:
+        // Instagram'ning ovozli mp4 formatlari bitta fayl, qolganlari ovozsiz VP9.
+        if (files.length === 0 && TOO_BIG.test(yt.output)) {
+            return { dir, files, tooBig: true };
+        }
 
         // Video topilmadi — rasmli post bo'lishi mumkin, gallery-dl bilan urinib ko'ramiz
         if (files.length === 0) {
@@ -86,23 +94,23 @@ export class DownloaderService implements OnModuleDestroy {
         }
 
         // Hech narsa yuklanmagan bo'lsa va yt-dlp haqiqiy xato bergan bo'lsa — retry uchun xato tashlaymiz
-        if (files.length === 0 && ytError && !NO_VIDEO.test(ytError)) {
+        if (files.length === 0 && yt.error && !NO_VIDEO.test(yt.error)) {
             await this.cleanup(dir);
-            throw new Error(`yt-dlp: ${ytError}`);
+            throw new Error(`yt-dlp: ${yt.error}`);
         }
 
         return { dir, files };
     }
 
-    // Dasturni ishga tushiradi; xato bo'lsa matnini qaytaradi (qisman yuklangan fayllar ham ishlatiladi)
-    private async run(cmd: string, args: string[], timeout: number): Promise<string | null> {
+    // Dasturni ishga tushiradi. Xato bo'lsa ham to'xtamaydi — qisman yuklangan fayllar ishlatiladi.
+    private async run(cmd: string, args: string[], timeout: number): Promise<{ error: string | null; output: string }> {
         try {
-            await exec(cmd, args, { timeout });
-            return null;
-        } catch (e) {
+            const { stdout, stderr } = await exec(cmd, args, { timeout });
+            return { error: null, output: stdout + stderr };
+        } catch (e: any) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.warn(`${cmd} exit non-zero: ${msg}`);
-            return msg;
+            return { error: msg, output: `${e?.stdout ?? ''}${e?.stderr ?? ''}` };
         }
     }
 
@@ -129,8 +137,8 @@ export class DownloaderService implements OnModuleDestroy {
     // Telegram webp'ni rasm sifatida yaxshi qabul qilmaydi — jpg'ga o'giramiz
     private async toJpeg(file: string): Promise<string> {
         const out = file.replace(/\.webp$/i, '.jpg');
-        const err = await this.run('ffmpeg', ['-y', '-v', 'error', '-i', file, out], 30_000);
-        return err ? file : out;
+        const { error } = await this.run('ffmpeg', ['-y', '-v', 'error', '-i', file, out], 30_000);
+        return error ? file : out;
     }
 
     // O'lchamlar ffprobe orqali olinadi — Instagram mp4 formatlarida yt-dlp ularni bermaydi.

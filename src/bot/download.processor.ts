@@ -42,7 +42,11 @@ export class DownloadProcessor extends WorkerHost {
       dir = result.dir;
       const t1 = Date.now();
 
-      if (result.files.length === 0) {
+      if (result.tooBig) {
+        await tg.sendMessage(chatId, 'Video juda katta (50 MB dan ortiq) — Telegram bot orqali yuborib bo\'lmaydi.', {
+          reply_parameters: { message_id: replyToMessageId },
+        });
+      } else if (result.files.length === 0) {
         await tg.sendMessage(chatId, 'Bu postda media topilmadi.', {
           reply_parameters: { message_id: replyToMessageId },
         });
