@@ -9,19 +9,37 @@ import { Redis } from 'ioredis';
 
 const exec = promisify(execFile);
 
-export interface VideoFile {
+export type MediaType = 'video' | 'photo';
+
+export interface MediaFile {
+    type: MediaType;
     path: string;
     width?: number;
     height?: number;
     duration?: number;
 }
 
+export interface CachedMedia {
+    type: MediaType;
+    fileId: string;
+}
+
+const PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
+// yt-dlp shunday desa, bu xato emas — postda haqiqatan video yo'q
+const NO_VIDEO = /no video|no media|unsupported url/i;
+
 @Injectable()
 export class DownloaderService implements OnModuleDestroy {
     private readonly logger = new Logger(DownloaderService.name);
     private readonly redis: Redis;
+    private readonly cookieArgs: string[];
 
     constructor(config: ConfigService) {
+        // Netscape formatidagi cookie fayli — Instagram rasmlari va 429 cheklovi uchun kerak
+        const cookies = config.get<string>('COOKIES_FILE');
+        this.cookieArgs = cookies ? ['--cookies', cookies] : [];
+
         this.redis = new Redis({
             host: config.get<string>('REDIS_HOST', '127.0.0.1'),
             port: Number(config.get('REDIS_PORT', 6379)),
@@ -38,41 +56,87 @@ export class DownloaderService implements OnModuleDestroy {
         return Number(res?.[1]?.[1] ?? 0);
     }
 
-    async download(url: string): Promise<{ dir: string; files: VideoFile[] }> {
-        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ig-'));
-        let error: string | null = null;
+    async download(url: string): Promise<{ dir: string; files: MediaFile[] }> {
+        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dl-'));
 
-        try {
-            await exec('yt-dlp', [
-                '-f', 'best[ext=mp4]',
-                '--ignore-errors',
-                '--no-warnings',
-                '--max-filesize', '50M',
-                '--socket-timeout', '30',
-                '-o', path.join(dir, '%(id)s.%(ext)s'),
+        const ytError = await this.run('yt-dlp', [
+            '-f', 'best[ext=mp4]',
+            '--ignore-errors',
+            '--no-warnings',
+            '--no-mtime',
+            '--max-filesize', '50M',
+            '--socket-timeout', '30',
+            ...this.cookieArgs,
+            '-o', path.join(dir, '%(id)s.%(ext)s'),
+            url,
+        ], 180_000);
+
+        let files = await this.collect(dir);
+
+        // Video topilmadi — rasmli post bo'lishi mumkin, gallery-dl bilan urinib ko'ramiz
+        if (files.length === 0) {
+            await this.run('gallery-dl', [
+                '-D', dir,
+                '--no-part',
+                '--no-mtime',
+                ...this.cookieArgs,
                 url,
-            ], { timeout: 180_000 });
-        } catch (e) {
-            error = e instanceof Error ? e.message : String(e);
-            this.logger.warn(`yt-dlp exit non-zero: ${error}`);
+            ], 120_000);
+            files = await this.collect(dir);
         }
 
-        const names = (await fs.readdir(dir)).filter((f) => f.endsWith('.mp4')).sort();
-        const files = await Promise.all(names.map((f) => this.readMeta(dir, f)));
-
-        // Hech narsa yuklanmagan bo'lsa va yt-dlp xato bergan bo'lsa — bu "video yo'q" emas, xato
-        if (files.length === 0 && error) {
+        // Hech narsa yuklanmagan bo'lsa va yt-dlp haqiqiy xato bergan bo'lsa — retry uchun xato tashlaymiz
+        if (files.length === 0 && ytError && !NO_VIDEO.test(ytError)) {
             await this.cleanup(dir);
-            throw new Error(`yt-dlp: ${error}`);
+            throw new Error(`yt-dlp: ${ytError}`);
         }
 
         return { dir, files };
     }
 
+    // Dasturni ishga tushiradi; xato bo'lsa matnini qaytaradi (qisman yuklangan fayllar ham ishlatiladi)
+    private async run(cmd: string, args: string[], timeout: number): Promise<string | null> {
+        try {
+            await exec(cmd, args, { timeout });
+            return null;
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.warn(`${cmd} exit non-zero: ${msg}`);
+            return msg;
+        }
+    }
+
+    // Yuklangan fayllarni yuklanish tartibida (post ichidagi tartib) yig'adi
+    private async collect(dir: string): Promise<MediaFile[]> {
+        const entries = await Promise.all(
+            (await fs.readdir(dir)).map(async (name) => ({
+                name,
+                ext: path.extname(name).toLowerCase(),
+                mtime: (await fs.stat(path.join(dir, name))).mtimeMs,
+            })),
+        );
+        const media = entries
+            .filter((e) => e.ext === '.mp4' || PHOTO_EXT.has(e.ext))
+            .sort((a, b) => a.mtime - b.mtime || a.name.localeCompare(b.name));
+
+        return Promise.all(media.map(async (e) => {
+            const file = path.join(dir, e.name);
+            if (e.ext === '.mp4') return this.readMeta(file);
+            return { type: 'photo' as const, path: e.ext === '.webp' ? await this.toJpeg(file) : file };
+        }));
+    }
+
+    // Telegram webp'ni rasm sifatida yaxshi qabul qilmaydi — jpg'ga o'giramiz
+    private async toJpeg(file: string): Promise<string> {
+        const out = file.replace(/\.webp$/i, '.jpg');
+        const err = await this.run('ffmpeg', ['-y', '-v', 'error', '-i', file, out], 30_000);
+        return err ? file : out;
+    }
+
     // O'lchamlar ffprobe orqali olinadi — Instagram mp4 formatlarida yt-dlp ularni bermaydi.
     // Busiz Telegram videoni kvadrat/noto'g'ri nisbatda ko'rsatadi.
-    private async readMeta(dir: string, file: string): Promise<VideoFile> {
-        const video: VideoFile = { path: path.join(dir, file) };
+    private async readMeta(file: string): Promise<MediaFile> {
+        const video: MediaFile = { type: 'video', path: file };
         try {
             const { stdout } = await exec('ffprobe', [
                 '-v', 'error',
@@ -98,14 +162,18 @@ export class DownloaderService implements OnModuleDestroy {
         return video;
     }
 
-    async getCached(shortcode: string): Promise<string[] | null> {
-        const raw = await this.redis.get(`ig:${shortcode}`);
-        return raw ? JSON.parse(raw) : null;
+    async getCached(key: string): Promise<CachedMedia[] | null> {
+        const raw = await this.redis.get(key);
+        if (!raw) return null;
+        // Eski format: faqat video file_id'lari massivi
+        return (JSON.parse(raw) as (string | CachedMedia)[]).map((m) =>
+            typeof m === 'string' ? { type: 'video', fileId: m } : m,
+        );
     }
 
-    async setCached(shortcode: string, fileIds: string[]) {
+    async setCached(key: string, media: CachedMedia[]) {
         // 30 kun saqlaymiz
-        await this.redis.setex(`ig:${shortcode}`, 60 * 60 * 24 * 30, JSON.stringify(fileIds));
+        await this.redis.setex(key, 60 * 60 * 24 * 30, JSON.stringify(media));
     }
 
     async cleanup(dir: string) {

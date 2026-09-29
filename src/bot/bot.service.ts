@@ -4,9 +4,8 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Telegraf } from 'telegraf';
 import { DownloaderService } from '../downloader/downloader.service.js';
-
-const IG_REGEX =
-  /https?:\/\/(?:www\.)?instagram\.com\/(?:p|reel|reels|tv)\/([\w-]+)/i;
+import { parseLink } from './links.js';
+import { sendMedia } from './media.js';
 
 @Injectable()
 export class BotService implements OnModuleInit, OnModuleDestroy {
@@ -29,36 +28,25 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     this.bot.start((ctx) =>
-      ctx.reply(' Assalomu Aleykum Hurmatli Mizoj😊\nInstagram post yoki reel linkini yuboring.✅\n '),
+      ctx.reply(' Assalomu Aleykum Hurmatli Mizoj😊\nInstagram, TikTok yoki Pinterest linkini yuboring.✅\n '),
     );
 
     this.bot.on('text', async (ctx) => {
-      const match = ctx.message.text.match(IG_REGEX);
-      if (!match) {
+      const link = parseLink(ctx.message.text);
+      if (!link) {
         // Guruhda javob yozmaymiz, faqat shaxsiy chatda
         if (ctx.chat.type === 'private') {
-          await ctx.reply('Bu Instagram linkiga o\'xshamaydi.');
+          await ctx.reply('Instagram, TikTok yoki Pinterest linkini yuboring.');
         }
         return; // guruhda link topilmasa — jim turamiz
       }
 
-      const url = match[0];
-      const shortcode = match[1];
-
       // 1. Cache
-      const cached = await this.downloader.getCached(shortcode);
+      const cached = await this.downloader.getCached(link.cacheKey);
       if (cached?.length) {
-        if (cached.length === 1) {
-          await ctx.replyWithVideo(cached[0], {
-            reply_parameters: { message_id: ctx.message.message_id },
-          });
-        } else {
-          for (let i = 0; i < cached.length; i += 10) {
-            await ctx.replyWithMediaGroup(
-              cached.slice(i, i + 10).map((id) => ({ type: 'video' as const, media: id })),
-            );
-          }
-        }
+        await sendMedia(ctx.telegram, ctx.chat.id, cached.map((m) => ({ type: m.type, media: m.fileId })), {
+          replyTo: ctx.message.message_id,
+        });
         return;
       }
 
@@ -85,8 +73,8 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       await this.queue.add(
         'download',
         {
-          url,
-          shortcode,
+          url: link.url,
+          cacheKey: link.cacheKey,
           chatId: ctx.chat.id,
           statusMessageId: status?.message_id ?? null,
           replyToMessageId: ctx.message.message_id,
