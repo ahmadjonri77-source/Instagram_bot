@@ -36,9 +36,11 @@ export class DownloadProcessor extends WorkerHost {
     sendAction();
     const actionTimer = setInterval(sendAction, 4000);
 
+    const t0 = Date.now();
     try {
       const result = await this.downloader.download(url);
       dir = result.dir;
+      const t1 = Date.now();
 
       if (result.files.length === 0) {
         await tg.sendMessage(chatId, 'Bu postda media topilmadi.', {
@@ -51,6 +53,10 @@ export class DownloadProcessor extends WorkerHost {
           sent: job.data.sent ?? [],
           onProgress: (s) => job.updateData({ ...job.data, sent: s }),
         });
+        // Qaysi bosqich sekinligini ko'rish uchun: navbat kutish / yuklab olish / Telegram'ga yuborish
+        this.logger.log(
+          `${cacheKey}: navbat ${t0 - job.timestamp}ms, yuklash ${t1 - t0}ms, yuborish ${Date.now() - t1}ms`,
+        );
         await this.downloader.setCached(cacheKey, sent);
         await this.postToChannel(url, sent);
       }
