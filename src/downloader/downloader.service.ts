@@ -9,6 +9,13 @@ import { Redis } from 'ioredis';
 
 const exec = promisify(execFile);
 
+export interface VideoFile {
+    path: string;
+    width?: number;
+    height?: number;
+    duration?: number;
+}
+
 @Injectable()
 export class DownloaderService implements OnModuleDestroy {
     private readonly logger = new Logger(DownloaderService.name);
@@ -31,7 +38,7 @@ export class DownloaderService implements OnModuleDestroy {
         return Number(res?.[1]?.[1] ?? 0);
     }
 
-    async download(url: string): Promise<{ dir: string; files: string[] }> {
+    async download(url: string): Promise<{ dir: string; files: VideoFile[] }> {
         const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ig-'));
         let error: string | null = null;
 
@@ -50,9 +57,8 @@ export class DownloaderService implements OnModuleDestroy {
             this.logger.warn(`yt-dlp exit non-zero: ${error}`);
         }
 
-        const files = (await fs.readdir(dir))
-            .filter((f) => f.endsWith('.mp4'))
-            .map((f) => path.join(dir, f));
+        const names = (await fs.readdir(dir)).filter((f) => f.endsWith('.mp4')).sort();
+        const files = await Promise.all(names.map((f) => this.readMeta(dir, f)));
 
         // Hech narsa yuklanmagan bo'lsa va yt-dlp xato bergan bo'lsa — bu "video yo'q" emas, xato
         if (files.length === 0 && error) {
@@ -61,6 +67,35 @@ export class DownloaderService implements OnModuleDestroy {
         }
 
         return { dir, files };
+    }
+
+    // O'lchamlar ffprobe orqali olinadi — Instagram mp4 formatlarida yt-dlp ularni bermaydi.
+    // Busiz Telegram videoni kvadrat/noto'g'ri nisbatda ko'rsatadi.
+    private async readMeta(dir: string, file: string): Promise<VideoFile> {
+        const video: VideoFile = { path: path.join(dir, file) };
+        try {
+            const { stdout } = await exec('ffprobe', [
+                '-v', 'error',
+                '-select_streams', 'v:0',
+                '-show_entries', 'stream=width,height:stream_side_data=rotation:format=duration',
+                '-of', 'json',
+                video.path,
+            ], { timeout: 15_000 });
+            const info = JSON.parse(stdout);
+            const stream = info.streams?.[0] ?? {};
+            const rotation = Math.abs(Number(stream.side_data_list?.[0]?.rotation ?? 0));
+            const rotated = rotation === 90 || rotation === 270;
+            if (stream.width && stream.height) {
+                video.width = rotated ? stream.height : stream.width;
+                video.height = rotated ? stream.width : stream.height;
+            }
+            const duration = Number(info.format?.duration);
+            if (duration > 0) video.duration = Math.round(duration);
+        } catch (e) {
+            // ffprobe bo'lmasa ham video yuboriladi, faqat o'lchamsiz
+            this.logger.warn(`ffprobe: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        return video;
     }
 
     async getCached(shortcode: string): Promise<string[] | null> {

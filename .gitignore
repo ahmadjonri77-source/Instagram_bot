@@ -59,3 +59,5 @@ dist
 *.tsbuildinfo
 node_modules
 .env
+# TypeScript incremental build
+*.tsbuildinfo

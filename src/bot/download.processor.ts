@@ -2,8 +2,16 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
-import { DownloaderService } from '../downloader/downloader.service.js';
+import { DownloaderService, VideoFile } from '../downloader/downloader.service.js';
 import { BotService } from './bot.service.js';
+
+// Telegram o'lchamni bilsa videoni asl nisbatida ko'rsatadi va darhol o'ynatadi
+const videoMeta = (f: VideoFile) => ({
+  width: f.width,
+  height: f.height,
+  duration: f.duration,
+  supports_streaming: true,
+});
 
 @Processor('downloads', { concurrency: 2 })
 export class DownloadProcessor extends WorkerHost {
@@ -31,14 +39,15 @@ export class DownloadProcessor extends WorkerHost {
     try {
       const result = await this.downloader.download(url);
       dir = result.dir;
-      const files = result.files.sort();
+      const files = result.files;
 
       if (files.length === 0) {
         await tg.sendMessage(chatId, 'Bu postda video topilmadi.', {
           reply_parameters: { message_id: replyToMessageId },
         });
       } else if (files.length === 1) {
-        const sent = await tg.sendVideo(chatId, { source: files[0] }, {
+        const sent = await tg.sendVideo(chatId, { source: files[0].path }, {
+          ...videoMeta(files[0]),
           reply_parameters: { message_id: replyToMessageId },
         });
         await this.downloader.setCached(shortcode, [sent.video.file_id]);
@@ -51,7 +60,8 @@ export class DownloadProcessor extends WorkerHost {
             chatId,
             files.slice(i, i + 10).map((f) => ({
               type: 'video' as const,
-              media: { source: f },
+              media: { source: f.path },
+              ...videoMeta(f),
             })),
             { reply_parameters: { message_id: replyToMessageId } },
           );
