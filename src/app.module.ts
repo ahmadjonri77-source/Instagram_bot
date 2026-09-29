@@ -1,15 +1,21 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BotModule } from './bot/bot.module.js';
 import { BullModule } from '@nestjs/bullmq';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    BullModule.forRoot({ connection: { host: '127.0.0.1', port: 6379 }, }),
-    BotModule
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST', '127.0.0.1'),
+          port: Number(config.get('REDIS_PORT', 6379)),
+        },
+      }),
+    }),
+    BotModule,
   ],
-  controllers: [],
-  providers: [],
 })
 export class AppModule { }

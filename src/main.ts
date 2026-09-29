@@ -2,8 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-  });
-  await app.listen(process.env.PORT ?? 3000);
+  // Bot HTTP server talab qilmaydi — faqat DI konteyner
+  const app = await NestFactory.createApplicationContext(AppModule);
+  app.enableShutdownHooks();
 }
 await bootstrap();

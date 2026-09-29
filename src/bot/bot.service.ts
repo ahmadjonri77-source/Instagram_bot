@@ -99,7 +99,15 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       );
     });
 
-    this.bot.launch();
+    // Handler ichidagi xato polling'ni to'xtatib qo'ymasligi uchun
+    this.bot.catch((err, ctx) => {
+      this.logger.error(`Update ${ctx.update.update_id} xatosi: ${err instanceof Error ? err.stack : String(err)}`);
+    });
+
+    this.bot.launch().catch((err) => {
+      this.logger.error(`Bot ishga tushmadi: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    });
     this.logger.log('Bot ishga tushdi');
   }
 
