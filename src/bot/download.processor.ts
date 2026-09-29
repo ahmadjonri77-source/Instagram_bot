@@ -6,7 +6,7 @@ import { CachedMedia, DownloaderService } from '../downloader/downloader.service
 import { BotService } from './bot.service.js';
 import { sendMedia } from './media.js';
 
-@Processor('downloads', { concurrency: 3 })
+@Processor('downloads', { concurrency: 5 })
 export class DownloadProcessor extends WorkerHost {
   private readonly logger = new Logger(DownloadProcessor.name);
   private readonly adminId: number | null;
