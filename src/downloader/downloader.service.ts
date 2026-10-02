@@ -40,11 +40,16 @@ export class DownloaderService implements OnModuleDestroy {
     private readonly logger = new Logger(DownloaderService.name);
     private readonly redis: Redis;
     private readonly cookieArgs: string[];
+    private readonly youtubeCookieArgs: string[];
 
     constructor(config: ConfigService) {
         // Netscape formatidagi cookie fayli — Instagram rasmlari va 429 cheklovi uchun kerak
         const cookies = config.get<string>('COOKIES_FILE');
         this.cookieArgs = cookies ? ['--cookies', cookies] : [];
+        // YouTube server IP'larini bloklaydi — alohida (bot uchun ochilgan) akkaunt cookie'lari kerak.
+        // Instagram cookie'lari bilan aralashmasligi uchun alohida fayl.
+        const ytCookies = config.get<string>('YOUTUBE_COOKIES_FILE');
+        this.youtubeCookieArgs = ytCookies ? ['--cookies', ytCookies] : this.cookieArgs;
 
         this.redis = new Redis({
             host: config.get<string>('REDIS_HOST', '127.0.0.1'),
@@ -66,6 +71,7 @@ export class DownloaderService implements OnModuleDestroy {
 
     async download(url: string): Promise<{ dir: string; files: MediaFile[]; tooBig?: boolean }> {
         const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dl-'));
+        const isYoutube = YOUTUBE.test(url);
         const ytdlp = (format: string) => this.run('yt-dlp', [
             '-f', format,
             '--ignore-errors',
@@ -75,12 +81,12 @@ export class DownloaderService implements OnModuleDestroy {
             '--max-filesize', '50M',
             '--socket-timeout', '30',
             '--merge-output-format', 'mp4',
-            ...this.cookieArgs,
+            ...(isYoutube ? this.youtubeCookieArgs : this.cookieArgs),
             '-o', path.join(dir, '%(id)s.%(ext)s'),
             url,
         ], 180_000);
 
-        const yt = await ytdlp(YOUTUBE.test(url) ? YOUTUBE_FORMAT : 'best[ext=mp4]');
+        const yt = await ytdlp(isYoutube ? YOUTUBE_FORMAT : 'best[ext=mp4]');
         let files = await this.collect(dir);
 
         // yt-dlp katta faylni jimgina tashlab ketadi (exit 0). Past sifatga o'tish yordam bermaydi:

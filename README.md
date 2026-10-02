@@ -14,6 +14,7 @@ BOT_TOKEN=...          # majburiy
 REDIS_HOST=127.0.0.1   # ixtiyoriy
 REDIS_PORT=6379        # ixtiyoriy
 COOKIES_FILE=...       # ixtiyoriy, Netscape formatidagi cookie fayli
+YOUTUBE_COOKIES_FILE=... # ixtiyoriy, YouTube uchun alohida akkaunt cookie'lari (server IP bloklanganda)
 ADMIN_ID=...           # ixtiyoriy, xatolar shu odamga yuboriladi
 CHANNEL_ID=...         # ixtiyoriy, yuklanganlar shu kanalga ham tashlanadi
 ```
