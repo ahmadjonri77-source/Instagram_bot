@@ -23,9 +23,7 @@ export class DownloadProcessor extends WorkerHost {
   }
 
   async process(job: Job) {
-    const { url, chatId, statusMessageId, replyToMessageId } = job.data;
-    // Eski job'larda faqat Instagram shortcode bo'lgan
-    const cacheKey: string = job.data.cacheKey ?? `ig:${job.data.shortcode}`;
+    const { url, cacheKey, chatId, statusMessageId, replyToMessageId } = job.data;
     const tg = this.botService.telegram;
     const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
     let dir: string | null = null;

@@ -45,6 +45,8 @@ export class DownloaderService implements OnModuleDestroy {
             host: config.get<string>('REDIS_HOST', '127.0.0.1'),
             port: Number(config.get('REDIS_PORT', 6379)),
         });
+        // Busiz ioredis har qayta ulanishda "Unhandled error event" deb logni to'ldiradi
+        this.redis.on('error', (e) => this.logger.warn(`Redis: ${e.message}`));
     }
 
     async onModuleDestroy() {
