@@ -1,4 +1,4 @@
-export type Platform = 'instagram' | 'tiktok' | 'pinterest';
+export type Platform = 'instagram' | 'tiktok' | 'pinterest' | 'facebook';
 
 export interface ParsedLink {
   platform: Platform;
@@ -33,6 +33,18 @@ const PATTERNS: { platform: Platform; regex: RegExp; key: (m: RegExpMatchArray) 
     platform: 'pinterest',
     regex: /https?:\/\/pin\.it\/([\w-]+)/i,
     key: (m) => `pin:s:${m[1]}`,
+  },
+  {
+    // facebook.com/reel/123, /watch?v=123, /<sahifa>/videos/123 (m., web. subdomenlari ham)
+    platform: 'facebook',
+    regex: /https?:\/\/(?:www\.|m\.|web\.)?facebook\.com\/(?:reel\/|watch\/?\?v=|[\w.-]+\/videos\/(?:[\w.-]+\/)?)(\d+)/i,
+    key: (m) => `fb:${m[1]}`,
+  },
+  {
+    // Qisqa/ulashish havolalari: fb.watch/xxx, facebook.com/share/{v,r,p}/xxx
+    platform: 'facebook',
+    regex: /https?:\/\/(?:fb\.watch|(?:www\.|m\.|web\.)?facebook\.com\/share\/[vrp])\/([\w-]+)/i,
+    key: (m) => `fb:s:${m[1]}`,
   },
 ];
 

@@ -28,7 +28,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     this.bot.start((ctx) =>
-      ctx.reply(' Assalomu Aleykum Hurmatli Mizoj😊\nInstagram, TikTok yoki Pinterest linkini yuboring.✅\n '),
+      ctx.reply(' Assalomu Aleykum Hurmatli Mizoj😊\nInstagram linkini yuboring.✅\n '),
     );
 
     this.bot.on('text', async (ctx) => {
@@ -36,7 +36,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       if (!link) {
         // Guruhda javob yozmaymiz, faqat shaxsiy chatda
         if (ctx.chat.type === 'private') {
-          await ctx.reply('Instagram, TikTok yoki Pinterest linkini yuboring.');
+          await ctx.reply('Instagram linkini yuboring.');
         }
         return; // guruhda link topilmasa — jim turamiz
       }
