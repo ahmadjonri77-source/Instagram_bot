@@ -30,6 +30,11 @@ const PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const NO_VIDEO = /no video|no media|unsupported url/i;
 const TOO_BIG = /larger than max-filesize/i;
 
+// YouTube'da ovozli mp4 faqat 360p — shuning uchun H.264 video va m4a ovoz alohida olinib, mp4 ga birlashtiriladi
+// (Telegram VP9/AV1 ni hamma qurilmada o'ynatmaydi)
+const YOUTUBE = /youtube\.com|youtu\.be/i;
+const YOUTUBE_FORMAT = 'bv*[ext=mp4][vcodec^=avc][height<=1080]+ba[ext=m4a]/b[ext=mp4]';
+
 @Injectable()
 export class DownloaderService implements OnModuleDestroy {
     private readonly logger = new Logger(DownloaderService.name);
@@ -69,12 +74,13 @@ export class DownloaderService implements OnModuleDestroy {
             // Telegram botlar 50 MB dan katta fayl yubora olmaydi
             '--max-filesize', '50M',
             '--socket-timeout', '30',
+            '--merge-output-format', 'mp4',
             ...this.cookieArgs,
             '-o', path.join(dir, '%(id)s.%(ext)s'),
             url,
         ], 180_000);
 
-        const yt = await ytdlp('best[ext=mp4]');
+        const yt = await ytdlp(YOUTUBE.test(url) ? YOUTUBE_FORMAT : 'best[ext=mp4]');
         let files = await this.collect(dir);
 
         // yt-dlp katta faylni jimgina tashlab ketadi (exit 0). Past sifatga o'tish yordam bermaydi:

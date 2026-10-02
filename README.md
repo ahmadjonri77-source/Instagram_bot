@@ -1,6 +1,6 @@
 # insta-bot
 
-Instagram, TikTok, Pinterest va Facebook havolalaridan video/rasmlarni yuklab beradigan Telegram bot.
+Instagram, TikTok, Pinterest, Facebook va YouTube Shorts havolalaridan video/rasmlarni yuklab beradigan Telegram bot.
 
 ## Talablar
 

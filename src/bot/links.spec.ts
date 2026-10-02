@@ -12,12 +12,14 @@ describe('parseLink', () => {
     ['https://www.facebook.com/page/videos/my-title/444555/', 'facebook', 'fb:444555'],
     ['https://fb.watch/abCD12-x/', 'facebook', 'fb:s:abCD12-x'],
     ['https://www.facebook.com/share/r/XyZ123/', 'facebook', 'fb:s:XyZ123'],
+    ['https://www.youtube.com/shorts/jNQXAC9IVRw', 'youtube', 'yt:jNQXAC9IVRw'],
+    ['https://youtube.com/shorts/jNQXAC9IVRw?si=abc', 'youtube', 'yt:jNQXAC9IVRw'],
   ])('%s', (text, platform, cacheKey) => {
     expect(parseLink(`qarang: ${text}`)).toMatchObject({ platform, cacheKey });
   });
 
   it('boshqa havolalarni tanimaydi', () => {
-    expect(parseLink('https://youtube.com/watch?v=1')).toBeNull();
+    expect(parseLink('https://www.youtube.com/watch?v=jNQXAC9IVRw')).toBeNull();
     expect(parseLink('salom')).toBeNull();
   });
 });

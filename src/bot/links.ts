@@ -1,4 +1,4 @@
-export type Platform = 'instagram' | 'tiktok' | 'pinterest' | 'facebook';
+export type Platform = 'instagram' | 'tiktok' | 'pinterest' | 'facebook' | 'youtube';
 
 export interface ParsedLink {
   platform: Platform;
@@ -45,6 +45,12 @@ const PATTERNS: { platform: Platform; regex: RegExp; key: (m: RegExpMatchArray) 
     platform: 'facebook',
     regex: /https?:\/\/(?:fb\.watch|(?:www\.|m\.|web\.)?facebook\.com\/share\/[vrp])\/([\w-]+)/i,
     key: (m) => `fb:s:${m[1]}`,
+  },
+  {
+    // Faqat Shorts — oddiy YouTube videolar odatda 50 MB dan katta
+    platform: 'youtube',
+    regex: /https?:\/\/(?:www\.|m\.)?youtube\.com\/shorts\/([\w-]{11})/i,
+    key: (m) => `yt:${m[1]}`,
   },
 ];
 
