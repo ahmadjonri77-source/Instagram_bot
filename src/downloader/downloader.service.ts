@@ -41,6 +41,7 @@ export class DownloaderService implements OnModuleDestroy {
     private readonly redis: Redis;
     private readonly cookieArgs: string[];
     private readonly youtubeCookieArgs: string[];
+    private readonly youtubeProxyArgs: string[];
 
     constructor(config: ConfigService) {
         // Netscape formatidagi cookie fayli — Instagram rasmlari va 429 cheklovi uchun kerak
@@ -50,6 +51,10 @@ export class DownloaderService implements OnModuleDestroy {
         // Instagram cookie'lari bilan aralashmasligi uchun alohida fayl.
         const ytCookies = config.get<string>('YOUTUBE_COOKIES_FILE');
         this.youtubeCookieArgs = ytCookies ? ['--cookies', ytCookies] : this.cookieArgs;
+        // Uy kompyuteridagi proxy (masalan socks5://100.x.y.z:1080) — YouTube uy IP'sini bloklamaydi.
+        // Faqat YouTube uchun: qolgan platformalar va Telegram to'g'ridan-to'g'ri ishlaydi.
+        const ytProxy = config.get<string>('YOUTUBE_PROXY');
+        this.youtubeProxyArgs = ytProxy ? ['--proxy', ytProxy] : [];
 
         this.redis = new Redis({
             host: config.get<string>('REDIS_HOST', '127.0.0.1'),
@@ -81,7 +86,7 @@ export class DownloaderService implements OnModuleDestroy {
             '--max-filesize', '50M',
             '--socket-timeout', '30',
             '--merge-output-format', 'mp4',
-            ...(isYoutube ? this.youtubeCookieArgs : this.cookieArgs),
+            ...(isYoutube ? [...this.youtubeCookieArgs, ...this.youtubeProxyArgs] : this.cookieArgs),
             '-o', path.join(dir, '%(id)s.%(ext)s'),
             url,
         ], 180_000);

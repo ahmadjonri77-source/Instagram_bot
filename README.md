@@ -15,6 +15,7 @@ REDIS_HOST=127.0.0.1   # ixtiyoriy
 REDIS_PORT=6379        # ixtiyoriy
 COOKIES_FILE=...       # ixtiyoriy, Netscape formatidagi cookie fayli
 YOUTUBE_COOKIES_FILE=... # ixtiyoriy, YouTube uchun alohida akkaunt cookie'lari (server IP bloklanganda)
+YOUTUBE_PROXY=...      # ixtiyoriy, YouTube uchun proxy, masalan socks5://100.x.y.z:1080 (uy kompyuteri)
 ADMIN_ID=...           # ixtiyoriy, xatolar shu odamga yuboriladi
 CHANNEL_ID=...         # ixtiyoriy, yuklanganlar shu kanalga ham tashlanadi
 ```
